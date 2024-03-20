@@ -1,0 +1,304 @@
+//  можно 17 16 уарт
+//там где wifi uart2
+/*
+   #define AUX4_17_PIN                           17  LCD_RS1
+  #define AUX4_18_PIN                           16     LCD_EN1
+
+
+  LCD_EN1
+*/
+
+
+/*interrupts for communication
+  Mega, Mega2560, MegaADK
+  2, 3, 18, 19, 20, 21 (pins 20 & 21 are not available to use for interrupts while they are used for I2C communication)
+
+  Mega
+  INT.0   INT.1   INT.2   INT.3   INT.4   INT.5
+  2       3       21      20      19      18
+
+*/
+
+
+// Подключаем библиотеки:
+#include <Wire.h>                                     // подключаем библиотеку для работы с шиной I2C
+#include <iarduino_I2C_connect.h>                     // подключаем библиотеку для соединения arduino по шине I2C
+iarduino_I2C_connect I2C2;                            // объявляем объект I2C2 для работы c библиотекой iarduino_I2C_connect
+//SLAVE byte   REG_Array[5];
+
+
+
+
+#define DRIVER_STEP_TIME 10  // меняем задержку на 10 мкс
+
+#define GS_FAST_PROFILE 10
+#include "GyverStepper2.h"
+
+uint32_t tar = 80000;
+bool dir = 1;
+
+#define REQUIRE_MEGA2560
+#include "macros.h"
+#include "pins_MKS_GEN_13.h"
+
+
+#define MAX_SPEED 10000
+#define ACCEL 10000
+
+bool dirX, dirY, dirZ, dirE0, dirE1;
+
+
+enum class axis {X, Y, Z, E0, E1, ALL};
+
+enum class state {home, mooving, stay};
+
+enum class position {unknown, down, top};
+
+position nowLocation[5] = {position::unknown, position::unknown, position::unknown, position::unknown, position::unknown};
+position nextLocation[5] = {position::top, position::top, position::top, position::top, position::top};
+
+
+
+GStepper2 <STEPPER2WIRE> stepperX(2048, X_STEP_PIN, X_DIR_PIN, X_ENABLE_PIN);
+GStepper2 <STEPPER2WIRE> stepperY(2048, Y_STEP_PIN, Y_DIR_PIN, Y_ENABLE_PIN);
+GStepper2 <STEPPER2WIRE> stepperZ(2048, Z_STEP_PIN, Z_DIR_PIN, Z_ENABLE_PIN);
+GStepper2 <STEPPER2WIRE> stepperE0(2048, E0_STEP_PIN, E0_DIR_PIN, E0_ENABLE_PIN);
+GStepper2 <STEPPER2WIRE> stepperE1(2048, E1_STEP_PIN, E1_DIR_PIN, E1_ENABLE_PIN);
+
+void setup() {
+
+  //MASTER
+  Wire.setClock(400000);                              // устанавливаем скорость передачи данных по шине I2C = 400кБит/с
+  Wire.begin();                                       // инициируем подключение к шине I2C в качестве ведущего (master) устройства.
+  //SLAVE
+  //  Wire.begin(0x01);                                   // инициируем подключение к шине I2C в качестве ведомого (slave) устройства, с указанием своего адреса на шине.
+  //  I2C2.begin(REG_Array);                              // инициируем возможность чтения/записи данных по шине I2C, из/в указываемый массив
+
+
+  pinMode(X_MIN_PIN, INPUT);
+  pinMode(X_MAX_PIN, INPUT);
+  pinMode(Y_MIN_PIN, INPUT);
+  pinMode(Y_MAX_PIN, INPUT);
+  pinMode(Z_MIN_PIN, INPUT);
+  pinMode(Z_MAX_PIN, INPUT);
+
+
+  //pinMode(X_ENABLE_PIN, OUTPUT);
+  pinMode(X_CS_PIN, OUTPUT);
+  pinMode(Y_CS_PIN, OUTPUT);
+  pinMode(Z_CS_PIN, OUTPUT);
+  pinMode(E0_CS_PIN, OUTPUT);
+  pinMode(E1_CS_PIN, OUTPUT);
+  //pinMode(Y_ENABLE_PIN, OUTPUT);
+
+
+  Serial.begin(9600);
+  //  Serial2.begin(9600);
+
+  //stepperX.enable();
+  stepperX.setMaxSpeed(MAX_SPEED);     // скорость движения к цели
+  stepperX.setAcceleration(ACCEL); // ускорение
+
+  stepperY.setMaxSpeed(MAX_SPEED);     // скорость движения к цели
+  stepperY.setAcceleration(ACCEL); // ускорение
+
+
+  stepperZ.setMaxSpeed(MAX_SPEED);     // скорость движения к цели
+  stepperZ.setAcceleration(ACCEL); // ускорение
+
+  stepperE0.setMaxSpeed(MAX_SPEED);     // скорость движения к цели
+  stepperE0.setAcceleration(ACCEL); // ускорение
+
+  stepperE1.setMaxSpeed(MAX_SPEED);     // скорость движения к цели
+  stepperE1.setAcceleration(ACCEL); // ускорение
+
+
+  homing();
+  stepperX.setTarget(-tar);
+  stepperY.setTarget(-tar);
+  stepperZ.setTarget(-tar);
+  stepperE0.setTarget(-tar);
+  stepperE1.setTarget(-tar);
+}
+
+void loop() {
+
+  //MASTER
+  I2C2.writeByte(0x01, 1, position::top);
+  I2C2.writeByte(0x01, 2, position::top);
+  I2C2.writeByte(0x01, 3, position::top);
+  I2C2.writeByte(0x01, 4, position::top);
+  I2C2.writeByte(0x01, 5, position::top);
+  Serial.println("I2C has been written...");
+  byte j = I2C2.readByte(0x01, 0);                    // Читаем значение 0 ячейки массива ведомого с адресом 0x01
+
+  //SLAVE
+  // REG_Array[0] = digitalRead(PIN_Button);             // Сохраняем состояние кнопки в 0 ячейку массива REG_Array
+  //  digitalWrite(PIN_LED, REG_Array[1]);                // Управляем светодиодом в соответствии со значением 1 ячейки массива REG_Array
+
+
+
+
+  while (1) {
+    stepperX.tick();   // мотор асинхронно крутится тут
+    stepperY.tick();
+    stepperZ.tick();
+    stepperE0.tick();
+    stepperE1.tick();
+    // если приехали
+    if (stepperX.ready() ) {
+      dirX = !dirX;   // разворачиваем
+      stepperX.setTarget(dirX * tar); // едем в другую сторону
+    }
+
+    if (stepperY.ready() ) {
+      dirY = !dirY;   // разворачиваем
+      stepperY.setTarget(dirY * tar); // едем в другую сторону
+    }
+
+    if (stepperZ.ready() ) {
+      dirZ = !dirZ;   // разворачиваем
+      stepperZ.setTarget(dirZ * tar); // едем в другую сторону
+    }
+
+    if (stepperE0.ready() ) {
+      dirE0 = !dirE0;   // разворачиваем
+      stepperE0.setTarget(dirE0 * tar); // едем в другую сторону
+    }
+
+    if (stepperE1.ready() ) {
+      dirE1 = !dirE1;   // разворачиваем
+      stepperE1.setTarget(dirE1 * tar); // едем в другую сторону
+    }
+    // асинхронный вывод в порт
+    static uint32_t tmr;
+    if (millis() - tmr >= 300) {
+      tmr = millis();
+      Serial.println(stepperX.pos);
+    }
+  }
+
+}
+
+
+void homing(axis homer) {
+  if (homer == axis::X || homer == axis::ALL) {
+    Serial.println("Homing.....");
+    Serial.println("Homing X");
+    if (digitalRead(X_MIN_PIN)) {       // если концевик X не нажат
+      stepperX.setSpeed(-10);       // ось Х, -10 шаг/сек
+      while (digitalRead(X_MIN_PIN)) {  // пока кнопка не нажата
+        stepperX.tick();               // крутим
+      }
+      // кнопка нажалась - покидаем цикл
+      stepperX.brake();                // тормозим, приехали
+    }
+    nowLocation[0] = position::down;
+    Serial.println("X Home!");
+  }
+
+
+  if (homer == axis::Y || homer == axis::ALL) {
+    Serial.println("Homing Y");
+
+    stepperY.reset();    // сбрасываем координаты в 0
+    if (digitalRead(X_MAX_PIN)) {       // если концевик X не нажат
+      stepperY.setSpeed(-10);       // ось Х, -10 шаг/сек
+      while (digitalRead(X_MAX_PIN)) {  // пока кнопка не нажата
+        stepperY.tick();               // крутим
+      }
+      // кнопка нажалась - покидаем цикл
+      stepperY.brake();                // тормозим, приехали
+    }
+    stepperY.reset();    // сбрасываем координаты в 0
+    nowLocation[1] = position::down;
+    Serial.println("Y Home!");
+  }
+  if (homer == axis::Z || homer == axis::ALL) {
+    Serial.println("Homing Z");
+
+    stepperZ.reset();    // сбрасываем координаты в 0
+    if (digitalRead(Y_MIN_PIN)) {       // если концевик X не нажат
+      stepperZ.setSpeed(-10);       // ось Х, -10 шаг/сек
+      while (digitalRead(Y_MIN_PIN)) {  // пока кнопка не нажата
+        stepperZ.tick();               // крутим
+      }
+      // кнопка нажалась - покидаем цикл
+      stepperZ.brake();                // тормозим, приехали
+    }
+    stepperZ.reset();    // сбрасываем координаты в 0
+
+    nowLocation[2] = position::down;
+    Serial.println("Z Home!");
+  }
+  if (homer == axis::E0 || homer == axis::ALL) {
+    Serial.println("Homing E0");
+
+
+
+    stepperE0.reset();    // сбрасываем координаты в 0
+    if (digitalRead(Y_MAX_PIN)) {       // если концевик X не нажат
+      stepperE0.setSpeed(-10);       // ось Х, -10 шаг/сек
+      while (digitalRead(Y_MAX_PIN)) {  // пока кнопка не нажата
+        stepperE0.tick();               // крутим
+      }
+      // кнопка нажалась - покидаем цикл
+      stepperE0.brake();                // тормозим, приехали
+    }
+    stepperE0.reset();    // сбрасываем координаты в 0
+
+    nowLocation[3] = position::down;
+    Serial.println("E0 Home!");
+  }
+  if (homer == axis::E1 || homer == axis::ALL) {
+    Serial.println("Homing E1");
+
+    stepperE1.reset();    // сбрасываем координаты в 0
+    if (digitalRead(Z_MIN_PIN)) {       // если концевик X не нажат
+      stepperE1.setSpeed(-10);       // ось Х, -10 шаг/сек
+      while (digitalRead(Z_MIN_PIN)) {  // пока кнопка не нажата
+        stepperE1.tick();               // крутим
+      }
+      // кнопка нажалась - покидаем цикл
+      stepperE1.brake();                // тормозим, приехали
+    }
+    stepperE1.reset();    // сбрасываем координаты в 0
+   
+    Serial.println("E1 Home!");
+  }
+ nowLocation[4] = position::down;
+  Serial.println("All axes at home");
+}
+
+
+
+
+
+
+
+
+
+// настроить таймер
+void initTimer() {
+  TCCR1A = 0;
+  // CTC по OCR1A, делитель /64
+  TCCR1B = bit(WGM12) | 0b011;
+}
+
+// установить период
+void setPeriod(uint32_t prd) {
+  // один тик таймера - 4 мкс (при 16 МГц клоке)
+  OCR1A = (uint32_t)prd >> 2;
+}
+
+// запустить и сбросить таймер
+void startTimer() {
+  TIMSK1 = bit(OCIE1A);
+  TCNT1 = 0;
+}
+
+// остановить таймер
+void stopTimer() {
+  TIMSK1 = 0;
+  TCNT1 = 0;
+}

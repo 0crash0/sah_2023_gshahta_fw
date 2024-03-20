@@ -1,0 +1,79 @@
+ /*
+
+    if(stepperX.ready()){
+      if (nowLocation[0] == position::down && nextLocation[0]==position::top){
+        nowLocation[0]=position::top;
+      }
+    }
+    if(stepperY.ready()){
+      if (nowLocation[1] == position::down && nextLocation[1]==position::top){
+        nowLocation[1]=position::top;
+      }
+    }
+    if(stepperZ.ready()){
+      if (nowLocation[2] == position::down && nextLocation[2]==position::top){
+        nowLocation[2]=position::top;
+      }
+    }
+    if(stepperE0.ready()){
+      if (nowLocation[3] == position::down && nextLocation[3]==position::top){
+        nowLocation[3]=position::top;
+      }
+    }
+    if(stepperE1.ready()){
+      if (nowLocation[4] == position::down && nextLocation[4]==position::top){
+        nowLocation[4]=position::top;
+      }
+    }
+
+    //X
+    if (nowLocation[0] != nextLocation[0] && motorsStatus) {
+      if (nextLocation[0] == position::top) {
+        stepperX.setTarget(-tar);
+      }
+      else {
+        stepperX.setTarget(tar);
+        nextLocation[0] = position::down;
+      }
+    }
+    //Y
+    if (nowLocation[1] != nextLocation[1]) {
+      if (nextLocation[1] == position::top) {
+        stepperY.setTarget(-tar);
+      }
+      else {
+        stepperY.setTarget(tar);
+        nextLocation[1] = position::down;
+      }
+    }
+    //Z
+    if (nowLocation[2] != nextLocation[2]) {
+      if (nextLocation[2] == position::top) {
+        stepperZ.setTarget(-tar);
+      }
+      else {
+        stepperZ.setTarget(tar);
+        nextLocation[2] = position::down;
+      }
+    }
+    //E0
+    if (nowLocation[3] != nextLocation[3]) {
+      if (nextLocation[3] == position::top) {
+        stepperE0.setTarget(-tar);
+      }
+      else {
+        stepperE0.setTarget(tar);
+        nextLocation[3] = position::down;
+      }
+    }
+    //E1
+    if (nowLocation[4] != nextLocation[4]) {
+      if (nextLocation[4] == position::top) {
+        stepperE1.setTarget(-tar);
+      }
+      else {
+        stepperE1.setTarget(tar);
+        nextLocation[4] = position::down;
+      }
+    }
+  */
